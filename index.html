@@ -1,0 +1,1519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code Path Predictor — Think Like a Computer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        display: ['Outfit', 'sans-serif'],
+                        mono: ['Space Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root {
+            --bg: #0F1218;
+            --surface: #171C24;
+            --card: #1C222D;
+            --code-bg: #0B0F15;
+            --border: #283040;
+            --text: #E2E8F0;
+            --muted: #64748B;
+            --accent: #FFB224;
+            --accent-dim: #7C5A14;
+            --true-color: #22D3A0;
+            --true-dim: #0F4F3D;
+            --false-color: #F4516C;
+            --false-dim: #5C1F2E;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Background canvas */
+        #bg-canvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* Confetti canvas */
+        #confetti-canvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        .main-container {
+            position: relative;
+            z-index: 1;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px 20px 60px;
+        }
+
+        /* Header */
+        .site-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.35rem;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            color: var(--text);
+        }
+        .logo i {
+            color: var(--accent);
+            font-size: 1.4rem;
+        }
+        .stats-bar {
+            display: flex;
+            gap: 20px;
+            font-size: 0.9rem;
+            color: var(--muted);
+        }
+        .stats-bar strong {
+            color: var(--accent);
+            font-weight: 700;
+        }
+
+        /* Progress bar */
+        .progress-track {
+            width: 100%;
+            height: 6px;
+            background: var(--border);
+            border-radius: 3px;
+            margin-bottom: 32px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), #FFDA6B);
+            border-radius: 3px;
+            transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            width: 0%;
+        }
+
+        /* Main layout */
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 28px;
+            align-items: start;
+        }
+
+        @media (max-width: 900px) {
+            .content-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Challenge panel */
+        .challenge-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px;
+        }
+        .challenge-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .challenge-number {
+            background: var(--accent);
+            color: #0F1218;
+            font-weight: 700;
+            font-size: 0.75rem;
+            padding: 4px 12px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .challenge-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .challenge-icon {
+            color: var(--accent);
+            font-size: 1.1rem;
+        }
+
+        /* Code block */
+        .code-block {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.82rem;
+            line-height: 1.75;
+            overflow-x: auto;
+            margin-bottom: 24px;
+            position: relative;
+        }
+        .code-block::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent), transparent);
+            border-radius: 12px 12px 0 0;
+        }
+        .line-numbers {
+            color: #3D4A5C;
+            user-select: none;
+            margin-right: 16px;
+            text-align: right;
+            display: inline-block;
+            min-width: 24px;
+        }
+        .kw { color: #FF7B72; }
+        .str { color: #A5D6FF; }
+        .num { color: #FFB224; }
+        .op { color: #79C0FF; }
+        .fn { color: #D2A8FF; }
+        .punc { color: #8B949E; }
+        .cmt { color: #484F58; font-style: italic; }
+        .var-name { color: #FFA657; }
+
+        /* Question section */
+        .question-section {
+            margin-bottom: 20px;
+        }
+        .question-text {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .question-text i {
+            color: var(--accent);
+        }
+
+        /* Option buttons */
+        .options-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .option-btn {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 18px;
+            background: var(--card);
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.88rem;
+            color: var(--text);
+        }
+        .option-btn:hover:not(.disabled) {
+            border-color: var(--accent);
+            background: rgba(255, 178, 36, 0.06);
+            transform: translateX(4px);
+        }
+        .option-btn.selected {
+            border-color: var(--accent);
+            background: rgba(255, 178, 36, 0.1);
+            box-shadow: 0 0 20px rgba(255, 178, 36, 0.1);
+        }
+        .option-btn.disabled {
+            cursor: default;
+            opacity: 0.6;
+        }
+        .option-btn.correct-reveal {
+            border-color: var(--true-color);
+            background: rgba(34, 211, 160, 0.1);
+            opacity: 1 !important;
+        }
+        .option-btn.wrong-reveal {
+            border-color: var(--false-color);
+            background: rgba(244, 81, 108, 0.08);
+            opacity: 1 !important;
+        }
+        .option-letter {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.8rem;
+            background: var(--border);
+            color: var(--muted);
+            flex-shrink: 0;
+            transition: all 0.25s ease;
+        }
+        .option-btn.selected .option-letter {
+            background: var(--accent);
+            color: #0F1218;
+        }
+        .option-btn.correct-reveal .option-letter {
+            background: var(--true-color);
+            color: #0F1218;
+        }
+        .option-btn.wrong-reveal .option-letter {
+            background: var(--false-color);
+            color: #fff;
+        }
+
+        /* Check button */
+        .check-btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 12px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: var(--accent);
+            color: #0F1218;
+            margin-top: 8px;
+        }
+        .check-btn:disabled {
+            background: var(--border);
+            color: var(--muted);
+            cursor: default;
+        }
+        .check-btn:not(:disabled):hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(255, 178, 36, 0.3);
+        }
+        .check-btn.next-mode {
+            background: var(--true-color);
+        }
+        .check-btn.next-mode:not(:disabled):hover {
+            box-shadow: 0 8px 24px rgba(34, 211, 160, 0.3);
+        }
+
+        /* Feedback area */
+        .feedback-area {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 12px;
+            animation: fadeSlideIn 0.4s ease;
+        }
+        .feedback-correct {
+            background: rgba(34, 211, 160, 0.08);
+            border: 1px solid rgba(34, 211, 160, 0.25);
+        }
+        .feedback-incorrect {
+            background: rgba(244, 81, 108, 0.06);
+            border: 1px solid rgba(244, 81, 108, 0.2);
+        }
+        .feedback-top {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+        .feedback-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+        .feedback-correct .feedback-icon {
+            background: rgba(34, 211, 160, 0.2);
+            color: var(--true-color);
+        }
+        .feedback-incorrect .feedback-icon {
+            background: rgba(244, 81, 108, 0.15);
+            color: var(--false-color);
+        }
+        .feedback-title {
+            font-weight: 700;
+            font-size: 1.05rem;
+        }
+        .feedback-correct .feedback-title { color: var(--true-color); }
+        .feedback-incorrect .feedback-title { color: var(--false-color); }
+
+        /* Step-by-step trace */
+        .trace-steps {
+            list-style: none;
+            padding: 0;
+            margin-top: 12px;
+        }
+        .trace-step {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 8px 0;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            color: var(--text);
+            opacity: 0;
+            animation: fadeSlideIn 0.35s ease forwards;
+        }
+        .trace-step-icon {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 0.65rem;
+            margin-top: 2px;
+        }
+        .trace-step.read .trace-step-icon { background: rgba(255,178,36,0.15); color: var(--accent); }
+        .trace-step.check .trace-step-icon { background: rgba(121,192,255,0.15); color: #79C0FF; }
+        .trace-step.result .trace-step-icon { background: rgba(34,211,160,0.15); color: var(--true-color); }
+        .trace-step.result-false .trace-step-icon { background: rgba(244,81,108,0.15); color: var(--false-color); }
+        .trace-step.output .trace-step-icon { background: rgba(210,168,255,0.15); color: #D2A8FF; }
+
+        /* Flowchart panel */
+        .flowchart-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px 20px;
+            position: sticky;
+            top: 24px;
+        }
+        .flowchart-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--muted);
+            text-align: center;
+            margin-bottom: 16px;
+        }
+        .flowchart-wrap {
+            position: relative;
+            width: 100%;
+            max-width: 340px;
+            margin: 0 auto;
+        }
+
+        /* SVG Flowchart styles */
+        .fc-line {
+            stroke: var(--border);
+            stroke-width: 2.5;
+            fill: none;
+            transition: stroke 0.5s ease, filter 0.5s ease, stroke-width 0.3s ease;
+        }
+        .fc-line.active-true {
+            stroke: var(--true-color);
+            stroke-width: 3;
+            filter: drop-shadow(0 0 6px rgba(34,211,160,0.4));
+        }
+        .fc-line.active-false {
+            stroke: var(--false-color);
+            stroke-width: 3;
+            filter: drop-shadow(0 0 6px rgba(244,81,108,0.4));
+        }
+        .fc-line.active-neutral {
+            stroke: var(--accent);
+            stroke-width: 3;
+            filter: drop-shadow(0 0 6px rgba(255,178,36,0.4));
+        }
+        .fc-line.dimmed {
+            stroke: #1E2530;
+            stroke-width: 2;
+        }
+
+        .fc-node-rect {
+            fill: var(--card);
+            stroke: var(--border);
+            stroke-width: 2;
+            rx: 10;
+            transition: all 0.5s ease;
+        }
+        .fc-node-rect.active-start {
+            fill: rgba(255,178,36,0.15);
+            stroke: var(--accent);
+            filter: drop-shadow(0 0 10px rgba(255,178,36,0.3));
+        }
+        .fc-node-rect.active-cond {
+            fill: rgba(255,178,36,0.1);
+            stroke: var(--accent);
+            filter: drop-shadow(0 0 12px rgba(255,178,36,0.35));
+        }
+        .fc-node-rect.active-if {
+            fill: rgba(34,211,160,0.12);
+            stroke: var(--true-color);
+            filter: drop-shadow(0 0 12px rgba(34,211,160,0.35));
+        }
+        .fc-node-rect.active-else {
+            fill: rgba(244,81,108,0.1);
+            stroke: var(--false-color);
+            filter: drop-shadow(0 0 12px rgba(244,81,108,0.3));
+        }
+        .fc-node-rect.dimmed {
+            fill: #14181F;
+            stroke: #1E2530;
+        }
+
+        .fc-text {
+            fill: var(--muted);
+            font-family: 'Space Mono', monospace;
+            font-size: 11px;
+            text-anchor: middle;
+            dominant-baseline: central;
+            transition: fill 0.5s ease;
+        }
+        .fc-text.active { fill: var(--text); }
+        .fc-text.dimmed { fill: #2A3140; }
+
+        .fc-label {
+            font-family: 'Outfit', sans-serif;
+            font-size: 11px;
+            font-weight: 700;
+            text-anchor: middle;
+            dominant-baseline: central;
+            transition: all 0.5s ease;
+        }
+        .fc-label-true { fill: #2A5A4A; }
+        .fc-label-true.active { fill: var(--true-color); }
+        .fc-label-true.dimmed { fill: #1A2E28; }
+        .fc-label-false { fill: #5A2A35; }
+        .fc-label-false.active { fill: var(--false-color); }
+        .fc-label-false.dimmed { fill: #2E1A20; }
+
+        .fc-start-text {
+            font-family: 'Outfit', sans-serif;
+            font-size: 12px;
+            font-weight: 700;
+            text-anchor: middle;
+            dominant-baseline: central;
+            transition: fill 0.5s ease;
+        }
+        .fc-start-text.active { fill: var(--accent); }
+
+        .fc-cond-badge {
+            font-family: 'Outfit', sans-serif;
+            font-size: 9px;
+            font-weight: 600;
+            fill: var(--accent);
+            text-anchor: middle;
+            dominant-baseline: central;
+            opacity: 0;
+            transition: opacity 0.4s ease;
+        }
+        .fc-cond-badge.show { opacity: 1; }
+
+        /* Pulse animation for active nodes */
+        @keyframes nodePulse {
+            0%, 100% { filter: drop-shadow(0 0 8px rgba(255,178,36,0.3)); }
+            50% { filter: drop-shadow(0 0 18px rgba(255,178,36,0.5)); }
+        }
+        .fc-node-rect.pulse-cond {
+            animation: nodePulse 1s ease-in-out 2;
+        }
+
+        /* Completion overlay */
+        .completion-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(15, 18, 24, 0.92);
+            backdrop-filter: blur(8px);
+        }
+        .completion-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 48px 40px;
+            text-align: center;
+            max-width: 440px;
+            width: 90%;
+            animation: fadeSlideIn 0.5s ease;
+        }
+        .completion-icon {
+            font-size: 3rem;
+            color: var(--accent);
+            margin-bottom: 20px;
+        }
+        .completion-title {
+            font-size: 1.8rem;
+            font-weight: 800;
+            margin-bottom: 8px;
+        }
+        .completion-subtitle {
+            color: var(--muted);
+            margin-bottom: 24px;
+            font-size: 1.05rem;
+        }
+        .score-display {
+            font-size: 3.5rem;
+            font-weight: 900;
+            color: var(--accent);
+            margin-bottom: 8px;
+        }
+        .score-label {
+            color: var(--muted);
+            font-size: 0.9rem;
+            margin-bottom: 24px;
+        }
+        .completion-message {
+            color: var(--text);
+            font-size: 1.05rem;
+            line-height: 1.6;
+            margin-bottom: 28px;
+        }
+        .restart-btn {
+            padding: 14px 36px;
+            border: none;
+            border-radius: 12px;
+            background: var(--accent);
+            color: #0F1218;
+            font-family: 'Outfit', sans-serif;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .restart-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(255, 178, 36, 0.3);
+        }
+
+        /* Animations */
+        @keyframes fadeSlideIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* Background gradient blobs */
+        .bg-blob {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(100px);
+            pointer-events: none;
+            z-index: 0;
+        }
+        .bg-blob-1 {
+            width: 500px; height: 500px;
+            background: rgba(255, 178, 36, 0.04);
+            top: -200px; left: -100px;
+        }
+        .bg-blob-2 {
+            width: 400px; height: 400px;
+            background: rgba(34, 211, 160, 0.03);
+            bottom: -150px; right: -100px;
+        }
+        .bg-blob-3 {
+            width: 300px; height: 300px;
+            background: rgba(244, 81, 108, 0.025);
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        /* Reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Background elements -->
+    <div class="bg-blob bg-blob-1"></div>
+    <div class="bg-blob bg-blob-2"></div>
+    <div class="bg-blob bg-blob-3"></div>
+    <canvas id="bg-canvas" aria-hidden="true"></canvas>
+    <canvas id="confetti-canvas" aria-hidden="true"></canvas>
+
+    <div class="main-container">
+        <!-- Header -->
+        <header class="site-header">
+            <div class="logo">
+                <i class="fas fa-code-branch"></i>
+                <span>Code Path Predictor</span>
+            </div>
+            <div class="stats-bar">
+                <span><i class="fas fa-star" style="color:var(--accent);margin-right:4px"></i> Score: <strong id="score-display">0</strong></span>
+                <span><i class="fas fa-layer-group" style="color:var(--muted);margin-right:4px"></i> <strong id="current-num">1</strong> / <strong id="total-num">8</strong></span>
+            </div>
+        </header>
+
+        <!-- Progress bar -->
+        <div class="progress-track" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="8">
+            <div class="progress-fill" id="progress-fill"></div>
+        </div>
+
+        <!-- Main content -->
+        <div class="content-grid">
+            <!-- Challenge Panel -->
+            <div class="challenge-panel" id="challenge-panel">
+                <div class="challenge-header">
+                    <span class="challenge-number" id="challenge-number">Challenge 1</span>
+                    <i class="challenge-icon fas fa-birthday-cake" id="challenge-icon"></i>
+                    <h2 class="challenge-title" id="challenge-title">The Age Gate</h2>
+                </div>
+
+                <div class="code-block" id="code-block" role="img" aria-label="Code snippet"></div>
+
+                <div class="question-section">
+                    <p class="question-text">
+                        <i class="fas fa-lightbulb"></i>
+                        What will the computer output?
+                    </p>
+                    <div class="options-grid" id="options-grid" role="radiogroup" aria-label="Answer options"></div>
+                </div>
+
+                <button class="check-btn" id="check-btn" disabled aria-label="Check your answer">
+                    Check My Answer
+                </button>
+
+                <div class="feedback-area" id="feedback-area" style="display:none;" aria-live="polite"></div>
+            </div>
+
+            <!-- Flowchart Panel -->
+            <div class="flowchart-panel">
+                <h3 class="flowchart-title">Decision Flow</h3>
+                <div class="flowchart-wrap">
+                    <svg id="flowchart-svg" viewBox="0 0 340 410" width="100%" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <filter id="glow-amber">
+                                <feGaussianBlur stdDeviation="4" result="blur"/>
+                                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                            </filter>
+                            <filter id="glow-green">
+                                <feGaussianBlur stdDeviation="4" result="blur"/>
+                                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                            </filter>
+                        </defs>
+
+                        <!-- Lines -->
+                        <line id="line-start-cond" class="fc-line" x1="170" y1="48" x2="170" y2="85"/>
+                        <path id="line-cond-split" class="fc-line" d="M170,140 L170,158"/>
+                        <path id="line-split-true" class="fc-line" d="M170,158 C170,180 75,185 75,210"/>
+                        <path id="line-split-false" class="fc-line" d="M170,158 C170,180 265,185 265,210"/>
+                        <line id="line-true-action" class="fc-line" x1="75" y1="235" x2="75" y2="290"/>
+                        <line id="line-false-action" class="fc-line" x1="265" y1="235" x2="265" y2="290"/>
+
+                        <!-- Start node -->
+                        <g id="node-start">
+                            <rect class="fc-node-rect" id="rect-start" x="105" y="8" width="130" height="40" rx="20"/>
+                            <text class="fc-start-text" id="text-start" x="170" y="28">START</text>
+                        </g>
+
+                        <!-- Condition node -->
+                        <g id="node-condition">
+                            <rect class="fc-node-rect" id="rect-cond" x="50" y="85" width="240" height="55" rx="10"/>
+                            <text class="fc-text" id="text-cond" x="170" y="108">condition ?</text>
+                            <text class="fc-cond-badge" id="cond-badge" x="170" y="128">CHECKING...</text>
+                        </g>
+
+                        <!-- TRUE label -->
+                        <text class="fc-label fc-label-true" id="label-true" x="40" y="228">TRUE</text>
+
+                        <!-- FALSE label -->
+                        <text class="fc-label fc-label-false" id="label-false" x="300" y="228">FALSE</text>
+
+                        <!-- IF action node -->
+                        <g id="node-if">
+                            <rect class="fc-node-rect" id="rect-if" x="5" y="290" width="140" height="55" rx="10"/>
+                            <text class="fc-text" id="text-if" x="75" y="318">IF Action</text>
+                        </g>
+
+                        <!-- ELSE action node -->
+                        <g id="node-else">
+                            <rect class="fc-node-rect" id="rect-else" x="195" y="290" width="140" height="55" rx="10"/>
+                            <text class="fc-text" id="text-else" x="265" y="318">ELSE Action</text>
+                        </g>
+
+                        <!-- Path result indicator -->
+                        <g id="result-indicator" opacity="0">
+                            <rect id="result-rect" x="55" y="365" width="230" height="36" rx="18" fill="none" stroke-width="2.5"/>
+                            <text id="result-text" x="170" y="383" font-family="Outfit, sans-serif" font-size="12" font-weight="700" text-anchor="middle" dominant-baseline="central"></text>
+                        </g>
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Completion overlay -->
+    <div class="completion-overlay" id="completion-overlay" style="display:none;">
+        <div class="completion-card">
+            <div class="completion-icon"><i class="fas fa-trophy"></i></div>
+            <h2 class="completion-title">All Challenges Complete</h2>
+            <p class="completion-subtitle">You've traced every decision path</p>
+            <div class="score-display" id="final-score">0/8</div>
+            <div class="score-label">Correct Predictions</div>
+            <p class="completion-message" id="completion-message"></p>
+            <button class="restart-btn" onclick="restartGame()">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+    // ========== CHALLENGE DATA ==========
+    const challenges = [
+        {
+            title: "The Age Gate",
+            icon: "fa-birthday-cake",
+            code: 'let age = 15;\n\nif (age >= 18) {\n  print("You can vote!");\n} else {\n  print("Too young to vote.");\n}',
+            condition: "age >= 18",
+            conditionResult: false,
+            ifResult: "You can vote!",
+            elseResult: "Too young to vote.",
+            explanation: "age is 15. Is 15 >= 18? No, 15 is less than 18. The condition is FALSE.",
+            steps: [
+                { type: "read", text: 'The computer reads: age = 15' },
+                { type: "check", text: 'It checks: Is age >= 18?' },
+                { type: "result-false", text: '15 >= 18 is FALSE' },
+                { type: "output", text: 'Follows ELSE path → "Too young to vote."' }
+            ]
+        },
+        {
+            title: "The Key Check",
+            icon: "fa-key",
+            code: 'let hasKey = true;\n\nif (hasKey) {\n  print("Door unlocked!");\n} else {\n  print("Door is locked.");\n}',
+            condition: "hasKey",
+            conditionResult: true,
+            ifResult: "Door unlocked!",
+            elseResult: "Door is locked.",
+            explanation: "hasKey is true. A boolean that is true makes the IF condition TRUE directly.",
+            steps: [
+                { type: "read", text: 'The computer reads: hasKey = true' },
+                { type: "check", text: 'It checks: Is hasKey true?' },
+                { type: "result", text: 'hasKey is TRUE' },
+                { type: "output", text: 'Follows IF path → "Door unlocked!"' }
+            ]
+        },
+        {
+            title: "Weather Decision",
+            icon: "fa-cloud-rain",
+            code: 'let weather = "rainy";\n\nif (weather == "sunny") {\n  print("Go to the park!");\n} else {\n  print("Stay indoors.");\n}',
+            condition: 'weather == "sunny"',
+            conditionResult: false,
+            ifResult: "Go to the park!",
+            elseResult: "Stay indoors.",
+            explanation: 'weather is "rainy". Is "rainy" == "sunny"? No, they are different strings. The condition is FALSE.',
+            steps: [
+                { type: "read", text: 'The computer reads: weather = "rainy"' },
+                { type: "check", text: 'It checks: Is weather == "sunny"?' },
+                { type: "result-false", text: '"rainy" does not equal "sunny" → FALSE' },
+                { type: "output", text: 'Follows ELSE path → "Stay indoors."' }
+            ]
+        },
+        {
+            title: "Not Raining",
+            icon: "fa-sun",
+            code: 'let isRaining = false;\n\nif (!isRaining) {\n  print("Have a picnic!");\n} else {\n  print("Stay inside.");\n}',
+            condition: "!isRaining",
+            conditionResult: true,
+            ifResult: "Have a picnic!",
+            elseResult: "Stay inside.",
+            explanation: "isRaining is false. The ! (NOT) operator flips it: !false = true. The condition is TRUE.",
+            steps: [
+                { type: "read", text: 'The computer reads: isRaining = false' },
+                { type: "check", text: 'It checks: Is !isRaining true?' },
+                { type: "result", text: '!false = true → The condition is TRUE' },
+                { type: "output", text: 'Follows IF path → "Have a picnic!"' }
+            ]
+        },
+        {
+            title: "Score Check",
+            icon: "fa-chart-bar",
+            code: 'let score = 85;\n\nif (score >= 90) {\n  print("Grade: A");\n} else {\n  print("Grade: B or lower");\n}',
+            condition: "score >= 90",
+            conditionResult: false,
+            ifResult: "Grade: A",
+            elseResult: "Grade: B or lower",
+            explanation: "score is 85. Is 85 >= 90? No, 85 is less than 90. The condition is FALSE.",
+            steps: [
+                { type: "read", text: 'The computer reads: score = 85' },
+                { type: "check", text: 'It checks: Is score >= 90?' },
+                { type: "result-false", text: '85 >= 90 is FALSE' },
+                { type: "output", text: 'Follows ELSE path → "Grade: B or lower"' }
+            ]
+        },
+        {
+            title: "Double Check",
+            icon: "fa-id-card",
+            code: 'let age = 25;\nlet hasID = true;\n\nif (age >= 18 && hasID) {\n  print("Entry granted!");\n} else {\n  print("Access denied.");\n}',
+            condition: "age >= 18 && hasID",
+            conditionResult: true,
+            ifResult: "Entry granted!",
+            elseResult: "Access denied.",
+            explanation: "age >= 18 is true (25 >= 18), and hasID is true. Both sides of && are true, so the whole condition is TRUE.",
+            steps: [
+                { type: "read", text: 'The computer reads: age = 25, hasID = true' },
+                { type: "check", text: 'It checks: Is age >= 18 AND hasID true?' },
+                { type: "result", text: '25 >= 18 = true, hasID = true → Both TRUE' },
+                { type: "output", text: 'Follows IF path → "Entry granted!"' }
+            ]
+        },
+        {
+            title: "Day Off",
+            icon: "fa-umbrella-beach",
+            code: 'let isWeekend = false;\nlet isHoliday = true;\n\nif (isWeekend || isHoliday) {\n  print("No school today!");\n} else {\n  print("Time for school.");\n}',
+            condition: "isWeekend || isHoliday",
+            conditionResult: true,
+            ifResult: "No school today!",
+            elseResult: "Time for school.",
+            explanation: "isWeekend is false, but isHoliday is true. With || (OR), only ONE needs to be true. The condition is TRUE.",
+            steps: [
+                { type: "read", text: 'The computer reads: isWeekend = false, isHoliday = true' },
+                { type: "check", text: 'It checks: Is isWeekend OR isHoliday true?' },
+                { type: "result", text: 'isWeekend = false, but isHoliday = true → TRUE' },
+                { type: "output", text: 'Follows IF path → "No school today!"' }
+            ]
+        },
+        {
+            title: "Temperature Alert",
+            icon: "fa-temperature-high",
+            code: 'let temp = 42;\n\nif (temp > 100) {\n  print("Dangerously hot!");\n} else {\n  print("Temperature is okay.");\n}',
+            condition: "temp > 100",
+            conditionResult: false,
+            ifResult: "Dangerously hot!",
+            elseResult: "Temperature is okay.",
+            explanation: "temp is 42. Is 42 > 100? No, 42 is much less than 100. The condition is FALSE.",
+            steps: [
+                { type: "read", text: 'The computer reads: temp = 42' },
+                { type: "check", text: 'It checks: Is temp > 100?' },
+                { type: "result-false", text: '42 > 100 is FALSE' },
+                { type: "output", text: 'Follows ELSE path → "Temperature is okay."' }
+            ]
+        }
+    ];
+
+    // ========== STATE ==========
+    let currentIndex = 0;
+    let score = 0;
+    let selectedOption = null; // "A" or "B"
+    let hasAnswered = false;
+    let shuffledOptions = []; // [{letter, text, isCorrect}]
+
+    // ========== DOM REFS ==========
+    const codeBlock = document.getElementById('code-block');
+    const optionsGrid = document.getElementById('options-grid');
+    const checkBtn = document.getElementById('check-btn');
+    const feedbackArea = document.getElementById('feedback-area');
+    const progressFill = document.getElementById('progress-fill');
+    const scoreDisplay = document.getElementById('score-display');
+    const currentNum = document.getElementById('current-num');
+    const totalNum = document.getElementById('total-num');
+    const challengeNumber = document.getElementById('challenge-number');
+    const challengeIcon = document.getElementById('challenge-icon');
+    const challengeTitle = document.getElementById('challenge-title');
+
+    // SVG refs
+    const rectStart = document.getElementById('rect-start');
+    const textStart = document.getElementById('text-start');
+    const rectCond = document.getElementById('rect-cond');
+    const textCond = document.getElementById('text-cond');
+    const condBadge = document.getElementById('cond-badge');
+    const rectIf = document.getElementById('rect-if');
+    const textIf = document.getElementById('text-if');
+    const rectElse = document.getElementById('rect-else');
+    const textElse = document.getElementById('text-else');
+    const labelTrue = document.getElementById('label-true');
+    const labelFalse = document.getElementById('label-false');
+    const lineStartCond = document.getElementById('line-start-cond');
+    const lineCondSplit = document.getElementById('line-cond-split');
+    const lineSplitTrue = document.getElementById('line-split-true');
+    const lineSplitFalse = document.getElementById('line-split-false');
+    const lineTrueAction = document.getElementById('line-true-action');
+    const lineFalseAction = document.getElementById('line-false-action');
+    const resultIndicator = document.getElementById('result-indicator');
+    const resultRect = document.getElementById('result-rect');
+    const resultText = document.getElementById('result-text');
+
+    // ========== SYNTAX HIGHLIGHTING ==========
+    function highlightCode(code) {
+        // Escape HTML first
+        let html = code
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+
+        // Highlight strings
+        html = html.replace(/"([^"]*)"/g, '<span class="str">"$1"</span>');
+
+        // Highlight keywords
+        html = html.replace(/\b(let|if|else|true|false)\b/g, '<span class="kw">$1</span>');
+
+        // Highlight function calls
+        html = html.replace(/\b(print)\b/g, '<span class="fn">$1</span>');
+
+        // Highlight numbers
+        html = html.replace(/\b(\d+)\b/g, '<span class="num">$1</span>');
+
+        // Highlight operators
+        html = html.replace(/(&gt;=|&lt;=|==|!=|&amp;&amp;|\|\||!)/g, '<span class="op">$1</span>');
+
+        // Add line numbers
+        const lines = html.split('\n');
+        let numbered = '';
+        lines.forEach((line, i) => {
+            const num = `<span class="line-numbers">${i + 1}</span>`;
+            numbered += num + line + '\n';
+        });
+
+        return numbered.trimEnd();
+    }
+
+    // ========== RENDER CHALLENGE ==========
+    function renderChallenge() {
+        const ch = challenges[currentIndex];
+
+        // Header
+        challengeNumber.textContent = `Challenge ${currentIndex + 1}`;
+        challengeIcon.className = `challenge-icon fas ${ch.icon}`;
+        challengeTitle.textContent = ch.title;
+        currentNum.textContent = currentIndex + 1;
+        totalNum.textContent = challenges.length;
+
+        // Progress
+        progressFill.style.width = `${(currentIndex / challenges.length) * 100}%`;
+        document.querySelector('.progress-track').setAttribute('aria-valuenow', currentIndex);
+
+        // Code
+        codeBlock.innerHTML = highlightCode(ch.code);
+
+        // Options - shuffle order
+        const opts = [
+            { text: ch.ifResult, isCorrect: ch.conditionResult === true },
+            { text: ch.elseResult, isCorrect: ch.conditionResult === false }
+        ];
+        // Shuffle
+        if (Math.random() > 0.5) opts.reverse();
+        shuffledOptions = opts.map((o, i) => ({
+            letter: i === 0 ? 'A' : 'B',
+            text: o.text,
+            isCorrect: o.isCorrect
+        }));
+
+        optionsGrid.innerHTML = '';
+        shuffledOptions.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn';
+            btn.setAttribute('role', 'radio');
+            btn.setAttribute('aria-checked', 'false');
+            btn.setAttribute('data-letter', opt.letter);
+            btn.innerHTML = `
+                <span class="option-letter">${opt.letter}</span>
+                <span>${opt.text}</span>
+            `;
+            btn.addEventListener('click', () => selectOption(opt.letter));
+            optionsGrid.appendChild(btn);
+        });
+
+        // Reset state
+        selectedOption = null;
+        hasAnswered = false;
+        checkBtn.disabled = true;
+        checkBtn.textContent = 'Check My Answer';
+        checkBtn.classList.remove('next-mode');
+        feedbackArea.style.display = 'none';
+
+        // Update flowchart text
+        textCond.textContent = ch.condition + ' ?';
+        // Truncate if too long
+        if (ch.condition.length > 22) {
+            textCond.setAttribute('font-size', '10');
+        } else {
+            textCond.setAttribute('font-size', '11');
+        }
+        textIf.textContent = truncateText(ch.ifResult, 16);
+        textElse.textContent = truncateText(ch.elseResult, 16);
+
+        // Reset flowchart visual state
+        resetFlowchart();
+    }
+
+    function truncateText(text, maxLen) {
+        return text.length > maxLen ? text.substring(0, maxLen - 1) + '…' : text;
+    }
+
+    // ========== OPTION SELECTION ==========
+    function selectOption(letter) {
+        if (hasAnswered) return;
+        selectedOption = letter;
+
+        document.querySelectorAll('.option-btn').forEach(btn => {
+            btn.classList.remove('selected');
+            btn.setAttribute('aria-checked', 'false');
+        });
+
+        const selectedBtn = document.querySelector(`[data-letter="${letter}"]`);
+        selectedBtn.classList.add('selected');
+        selectedBtn.setAttribute('aria-checked', 'true');
+
+        checkBtn.disabled = false;
+    }
+
+    // ========== CHECK ANSWER ==========
+    function checkAnswer() {
+        if (!selectedOption || hasAnswered) return;
+
+        // If already answered, this acts as "Next Challenge"
+        if (hasAnswered) {
+            nextChallenge();
+            return;
+        }
+
+        hasAnswered = true;
+        const ch = challenges[currentIndex];
+        const selectedOpt = shuffledOptions.find(o => o.letter === selectedOption);
+        const isCorrect = selectedOpt.isCorrect;
+
+        if (isCorrect) score++;
+        scoreDisplay.textContent = score;
+
+        // Disable options
+        document.querySelectorAll('.option-btn').forEach(btn => {
+            btn.classList.add('disabled');
+        });
+
+        // Highlight correct/wrong
+        shuffledOptions.forEach(opt => {
+            const btn = document.querySelector(`[data-letter="${opt.letter}"]`);
+            if (opt.isCorrect) {
+                btn.classList.add('correct-reveal');
+            } else if (opt.letter === selectedOption && !isCorrect) {
+                btn.classList.add('wrong-reveal');
+            }
+        });
+
+        // Animate flowchart
+        animateFlowchart(ch.conditionResult, isCorrect);
+
+        // Show feedback after animation
+        setTimeout(() => {
+            showFeedback(isCorrect, ch);
+        }, 2800);
+
+        // Change button to Next
+        setTimeout(() => {
+            if (currentIndex < challenges.length - 1) {
+                checkBtn.textContent = 'Next Challenge';
+                checkBtn.classList.add('next-mode');
+            } else {
+                checkBtn.textContent = 'See Results';
+                checkBtn.classList.add('next-mode');
+            }
+            checkBtn.disabled = false;
+            checkBtn.onclick = nextChallenge;
+        }, 3000);
+    }
+
+    // Wire up the check button
+    checkBtn.addEventListener('click', checkAnswer);
+
+    // ========== FLOWCHART ANIMATION ==========
+    function resetFlowchart() {
+        // Reset all nodes to default
+        rectStart.className.baseVal = 'fc-node-rect';
+        rectCond.className.baseVal = 'fc-node-rect';
+        rectIf.className.baseVal = 'fc-node-rect';
+        rectElse.className.baseVal = 'fc-node-rect';
+
+        textStart.classList.remove('active');
+        textCond.classList.remove('active');
+        textIf.classList.remove('active', 'dimmed');
+        textElse.classList.remove('active', 'dimmed');
+        condBadge.classList.remove('show');
+        condBadge.textContent = 'CHECKING...';
+
+        labelTrue.className.baseVal = 'fc-label fc-label-true';
+        labelFalse.className.baseVal = 'fc-label fc-label-false';
+
+        // Reset lines
+        const allLines = [lineStartCond, lineCondSplit, lineSplitTrue, lineSplitFalse, lineTrueAction, lineFalseAction];
+        allLines.forEach(l => {
+            l.className.baseVal = 'fc-line';
+        });
+
+        // Hide result indicator
+        resultIndicator.setAttribute('opacity', '0');
+    }
+
+    function animateFlowchart(conditionIsTrue, isCorrect) {
+        const ch = challenges[currentIndex];
+
+        // Step 1: Activate START node
+        setTimeout(() => {
+            rectStart.classList.add('active-start');
+            textStart.classList.add('active');
+            lineStartCond.classList.add('active-neutral');
+        }, 200);
+
+        // Step 2: Activate CONDITION node
+        setTimeout(() => {
+            rectCond.classList.add('active-cond', 'pulse-cond');
+            textCond.classList.add('active');
+            lineCondSplit.classList.add('active-neutral');
+            condBadge.classList.add('show');
+        }, 800);
+
+        // Step 3: Show condition result
+        setTimeout(() => {
+            if (conditionIsTrue) {
+                condBadge.textContent = 'TRUE';
+                condBadge.style.fill = 'var(--true-color)';
+            } else {
+                condBadge.textContent = 'FALSE';
+                condBadge.style.fill = 'var(--false-color)';
+            }
+        }, 1500);
+
+        // Step 4: Light up the correct path
+        setTimeout(() => {
+            if (conditionIsTrue) {
+                // TRUE path
+                lineSplitTrue.classList.add('active-true');
+                lineTrueAction.classList.add('active-true');
+                labelTrue.classList.add('active');
+                rectIf.classList.add('active-if');
+                textIf.classList.add('active');
+
+                // Dim FALSE path
+                lineSplitFalse.classList.add('dimmed');
+                lineFalseAction.classList.add('dimmed');
+                labelFalse.classList.add('dimmed');
+                rectElse.classList.add('dimmed');
+                textElse.classList.add('dimmed');
+            } else {
+                // FALSE path
+                lineSplitFalse.classList.add('active-false');
+                lineFalseAction.classList.add('active-false');
+                labelFalse.classList.add('active');
+                rectElse.classList.add('active-else');
+                textElse.classList.add('active');
+
+                // Dim TRUE path
+                lineSplitTrue.classList.add('dimmed');
+                lineTrueAction.classList.add('dimmed');
+                labelTrue.classList.add('dimmed');
+                rectIf.classList.add('dimmed');
+                textIf.classList.add('dimmed');
+            }
+        }, 2000);
+
+        // Step 5: Show result indicator
+        setTimeout(() => {
+            resultIndicator.setAttribute('opacity', '1');
+            if (conditionIsTrue) {
+                resultRect.setAttribute('stroke', 'var(--true-color)');
+                resultRect.setAttribute('fill', 'rgba(34,211,160,0.08)');
+                resultText.setAttribute('fill', 'var(--true-color)');
+                resultText.textContent = 'Computer chose: IF path';
+            } else {
+                resultRect.setAttribute('stroke', 'var(--false-color)');
+                resultRect.setAttribute('fill', 'rgba(244,81,108,0.08)');
+                resultText.setAttribute('fill', 'var(--false-color)');
+                resultText.textContent = 'Computer chose: ELSE path';
+            }
+        }, 2600);
+
+        // Confetti if correct
+        if (isCorrect) {
+            setTimeout(() => launchConfetti(), 2200);
+        }
+    }
+
+    // ========== FEEDBACK ==========
+    function showFeedback(isCorrect, ch) {
+        feedbackArea.style.display = 'block';
+        feedbackArea.className = 'feedback-area ' + (isCorrect ? 'feedback-correct' : 'feedback-incorrect');
+
+        const icon = isCorrect
+            ? '<i class="fas fa-check"></i>'
+            : '<i class="fas fa-arrow-right"></i>';
+
+        const title = isCorrect
+            ? getRandomPhrase(correctPhrases)
+            : getRandomPhrase(incorrectPhrases);
+
+        let stepsHtml = '';
+        ch.steps.forEach((step, i) => {
+            const iconMap = {
+                'read': 'fa-book-open',
+                'check': 'fa-search',
+                'result': 'fa-check-circle',
+                'result-false': 'fa-times-circle',
+                'output': 'fa-terminal'
+            };
+            stepsHtml += `
+                <li class="trace-step ${step.type}" style="animation-delay:${i * 0.2}s">
+                    <span class="trace-step-icon"><i class="fas ${iconMap[step.type]}"></i></span>
+                    <span>${step.text}</span>
+                </li>
+            `;
+        });
+
+        feedbackArea.innerHTML = `
+            <div class="feedback-top">
+                <div class="feedback-icon">${icon}</div>
+                <div class="feedback-title">${title}</div>
+            </div>
+            <p style="color:var(--muted);font-size:0.9rem;margin-bottom:12px;">${ch.explanation}</p>
+            <ul class="trace-steps">${stepsHtml}</ul>
+        `;
+    }
+
+    const correctPhrases = [
+        "Excellent! You are thinking like a programmer!",
+        "Correct! The computer followed that exact path!",
+        "Nailed it! Your logic is spot on!",
+        "Brilliant! You read the condition perfectly!",
+        "Spot on! You traced the code like a pro!"
+    ];
+
+    const incorrectPhrases = [
+        "Good attempt! Let's trace the computer's thinking together.",
+        "Not quite! Let's check the condition step by step.",
+        "Close one! Let's see how the computer decided.",
+        "Good guess! Let's walk through the logic together."
+    ];
+
+    function getRandomPhrase(arr) {
+        return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    // ========== NEXT CHALLENGE ==========
+    function nextChallenge() {
+        currentIndex++;
+        if (currentIndex >= challenges.length) {
+            showCompletion();
+            return;
+        }
+        renderChallenge();
+        checkBtn.onclick = null;
+        checkBtn.addEventListener('click', checkAnswer);
+    }
+
+    // ========== COMPLETION ==========
+    function showCompletion() {
+        const overlay = document.getElementById('completion-overlay');
+        overlay.style.display = 'flex';
+
+        document.getElementById('final-score').textContent = `${score}/${challenges.length}`;
+
+        let message = '';
+        const pct = score / challenges.length;
+        if (pct === 1) {
+            message = "Perfect score! You predicted every single path correctly. You truly think like a programmer — conditionals have no secrets from you!";
+        } else if (pct >= 0.75) {
+            message = "Great job! You correctly traced most of the decision paths. With a bit more practice, you'll nail every one!";
+        } else if (pct >= 0.5) {
+            message = "Nice effort! You're getting the hang of how computers evaluate conditions. Keep practicing and you'll master IF/ELSE logic!";
+        } else {
+            message = "Good start! Understanding how computers make decisions takes practice. Try again and focus on checking each condition step by step!";
+        }
+        document.getElementById('completion-message').textContent = message;
+
+        // Confetti celebration
+        if (pct >= 0.5) {
+            launchConfetti();
+            setTimeout(launchConfetti, 500);
+        }
+
+        // Update progress to full
+        progressFill.style.width = '100%';
+    }
+
+    function restartGame() {
+        currentIndex = 0;
+        score = 0;
+        scoreDisplay.textContent = '0';
+        document.getElementById('completion-overlay').style.display = 'none';
+        renderChallenge();
+        checkBtn.onclick = null;
+        checkBtn.addEventListener('click', checkAnswer);
+    }
+
+    // ========== CONFETTI ==========
+    function launchConfetti() {
+        const canvas = document.getElementById('confetti-canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const colors = ['#FFB224', '#22D3A0', '#F4516C', '#7C5CFC', '#00D4FF', '#FFDA6B', '#FF8A65'];
+        const particles = [];
+
+        for (let i = 0; i < 70; i++) {
+            particles.push({
+                x: canvas.width / 2 + (Math.random() - 0.5) * 200,
+                y: canvas.height / 2,
+                vx: (Math.random() - 0.5) * 18,
+                vy: (Math.random() - 0.5) * 18 - 8,
+                color: colors[Math.floor(Math.random() * colors.length)],
+                size: Math.random() * 7 + 3,
+                rotation: Math.random() * 360,
+                rotSpeed: (Math.random() - 0.5) * 12,
+                gravity: 0.35,
+                opacity: 1,
+                decay: 0.012 + Math.random() * 0.008,
+                shape: Math.random() > 0.5 ? 'rect' : 'circle'
+            });
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            let alive = false;
+
+            particles.forEach(p => {
+                if (p.opacity <= 0) return;
+                alive = true;
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += p.gravity;
+                p.vx *= 0.99;
+                p.rotation += p.rotSpeed;
+                p.opacity -= p.decay;
+
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate(p.rotation * Math.PI / 180);
+                ctx.globalAlpha = Math.max(0, p.opacity);
+                ctx.fillStyle = p.color;
+
+                if (p.shape === 'rect') {
+                    ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+            });
+
+            if (alive) requestAnimationFrame(animate);
+            else ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        animate();
+    }
+
+    // ========== BACKGROUND PARTICLES ==========
+    function initBgParticles() {
+        const canvas = document.getElementById('bg-canvas');
+        const ctx = canvas.getContext('2d');
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resize();
+        window.addEventListener('resize', resize);
+
+        const dots = [];
+        const count = Math.min(60, Math.floor(window.innerWidth * window.innerHeight / 20000));
+
+        for (let i = 0; i < count; i++) {
+            dots.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                vx: (Math.random() - 0.5) * 0.3,
+                vy: (Math.random() - 0.5) * 0.3,
+                size: Math.random() * 1.5 + 0.5,
+                opacity: Math.random() * 0.3 + 0.1
+            });
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            dots.forEach(d => {
+                d.x += d.vx;
+                d.y += d.vy;
+                if (d.x < 0) d.x = canvas.width;
+                if (d.x > canvas.width) d.x = 0;
+                if (d.y < 0) d.y = canvas.height;
+                if (d.y > canvas.height) d.y = 0;
+
+                ctx.beginPath();
+                ctx.arc(d.x, d.y, d.size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 178, 36, ${d.opacity})`;
+                ctx.fill();
+            });
+
+            // Draw faint connections between nearby dots
+            for (let i = 0; i < dots.length; i++) {
+                for (let j = i + 1; j < dots.length; j++) {
+                    const dx = dots[i].x - dots[j].x;
+                    const dy = dots[i].y - dots[j].y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < 120) {
+                        ctx.beginPath();
+                        ctx.moveTo(dots[i].x, dots[i].y);
+                        ctx.lineTo(dots[j].x, dots[j].y);
+                        ctx.strokeStyle = `rgba(255, 178, 36, ${0.06 * (1 - dist / 120)})`;
+                        ctx.lineWidth = 0.5;
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            requestAnimationFrame(draw);
+        }
+        draw();
+    }
+
+    // ========== KEYBOARD SUPPORT ==========
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'a' || e.key === 'A') selectOption('A');
+        if (e.key === 'b' || e.key === 'B') selectOption('B');
+        if (e.key === 'Enter' && !checkBtn.disabled) checkAnswer();
+    });
+
+    // ========== INIT ==========
+    function init() {
+        initBgParticles();
+        renderChallenge();
+    }
+
+    init();
+    </script>
+</body>
+</html>
