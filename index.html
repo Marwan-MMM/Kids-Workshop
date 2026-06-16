@@ -799,7 +799,7 @@
         {
             title: "The Age Gate",
             icon: "fa-birthday-cake",
-            code: 'let age = 15;\n\nif (age >= 18) {\n  print("You can vote!");\n} else {\n  print("Too young to vote.");\n}',
+            code: 'age = 15;\n\nif (age >= 18) {\n  print("You can vote!");\n} else {\n  print("Too young to vote.");\n}',
             condition: "age >= 18",
             conditionResult: false,
             ifResult: "You can vote!",
@@ -815,7 +815,7 @@
         {
             title: "The Key Check",
             icon: "fa-key",
-            code: 'let hasKey = true;\n\nif (hasKey) {\n  print("Door unlocked!");\n} else {\n  print("Door is locked.");\n}',
+            code: 'hasKey = true;\n\nif (hasKey) {\n  print("Door unlocked!");\n} else {\n  print("Door is locked.");\n}',
             condition: "hasKey",
             conditionResult: true,
             ifResult: "Door unlocked!",
@@ -831,15 +831,15 @@
         {
             title: "Weather Decision",
             icon: "fa-cloud-rain",
-            code: 'let weather = "rainy";\n\nif (weather == "sunny") {\n  print("Go to the park!");\n} else {\n  print("Stay indoors.");\n}',
-            condition: 'weather == "sunny"',
+            code: 'weather = "rainy";\n\nif (weather = "sunny") {\n  print("Go to the park!");\n} else {\n  print("Stay indoors.");\n}',
+            condition: 'weather = "sunny"',
             conditionResult: false,
             ifResult: "Go to the park!",
             elseResult: "Stay indoors.",
-            explanation: 'weather is "rainy". Is "rainy" == "sunny"? No, they are different strings. The condition is FALSE.',
+            explanation: 'weather is "rainy". Is "rainy" = "sunny"? No, they are different strings. The condition is FALSE.',
             steps: [
                 { type: "read", text: 'The computer reads: weather = "rainy"' },
-                { type: "check", text: 'It checks: Is weather == "sunny"?' },
+                { type: "check", text: 'It checks: Is weather = "sunny"?' },
                 { type: "result-false", text: '"rainy" does not equal "sunny" → FALSE' },
                 { type: "output", text: 'Follows ELSE path → "Stay indoors."' }
             ]
@@ -847,7 +847,7 @@
         {
             title: "Not Raining",
             icon: "fa-sun",
-            code: 'let isRaining = false;\n\nif (!isRaining) {\n  print("Have a picnic!");\n} else {\n  print("Stay inside.");\n}',
+            code: 'isRaining = false;\n\nif (!isRaining) {\n  print("Have a picnic!");\n} else {\n  print("Stay inside.");\n}',
             condition: "!isRaining",
             conditionResult: true,
             ifResult: "Have a picnic!",
@@ -863,7 +863,7 @@
         {
             title: "Score Check",
             icon: "fa-chart-bar",
-            code: 'let score = 85;\n\nif (score >= 90) {\n  print("Grade: A");\n} else {\n  print("Grade: B or lower");\n}',
+            code: 'score = 85;\n\nif (score >= 90) {\n  print("Grade: A");\n} else {\n  print("Grade: B or lower");\n}',
             condition: "score >= 90",
             conditionResult: false,
             ifResult: "Grade: A",
@@ -879,7 +879,7 @@
         {
             title: "Double Check",
             icon: "fa-id-card",
-            code: 'let age = 25;\nlet hasID = true;\n\nif (age >= 18 && hasID) {\n  print("Entry granted!");\n} else {\n  print("Access denied.");\n}',
+            code: 'age = 25;\n hasID = true;\n\nif (age >= 18 && hasID) {\n  print("Entry granted!");\n} else {\n  print("Access denied.");\n}',
             condition: "age >= 18 && hasID",
             conditionResult: true,
             ifResult: "Entry granted!",
@@ -895,7 +895,7 @@
         {
             title: "Day Off",
             icon: "fa-umbrella-beach",
-            code: 'let isWeekend = false;\nlet isHoliday = true;\n\nif (isWeekend || isHoliday) {\n  print("No school today!");\n} else {\n  print("Time for school.");\n}',
+            code: 'isWeekend = false;\nisHoliday = true;\n\nif (isWeekend || isHoliday) {\n  print("No school today!");\n} else {\n  print("Time for school.");\n}',
             condition: "isWeekend || isHoliday",
             conditionResult: true,
             ifResult: "No school today!",
@@ -911,7 +911,7 @@
         {
             title: "Temperature Alert",
             icon: "fa-temperature-high",
-            code: 'let temp = 42;\n\nif (temp > 100) {\n  print("Dangerously hot!");\n} else {\n  print("Temperature is okay.");\n}',
+            code: 'temp = 42;\n\nif (temp > 100) {\n  print("Dangerously hot!");\n} else {\n  print("Temperature is okay.");\n}',
             condition: "temp > 100",
             conditionResult: false,
             ifResult: "Dangerously hot!",
